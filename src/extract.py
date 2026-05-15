@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-# Seed locations: global + top 5 countries
+# Seed locations: top 5 countries
+# Note: global rankings use a separate endpoint not supported by get_top_players
 LOCATIONS = {
-    "global":  57000000,
     "US":      57000249,
     "FR":      57000076,
     "DE":      57000056,
