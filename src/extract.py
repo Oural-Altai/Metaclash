@@ -1,13 +1,19 @@
 """
 extract.py — Clash Royale data extraction module.
 
-Seed players from top rankings across multiple locations,
-then snowball-crawl battlelogs with smart filtering:
+Seed players from rankings (Path of Legends + trophy rankings) across
+multiple locations, then snowball-crawl battlelogs with smart filtering:
   - High level + high arena  → experienced player (keep)
   - Low level + high arena   → overperformer (priority keep)
   - High level + low arena   → smurf (skip)
 
 Deduplication: in-memory set + BigQuery check between runs.
+
+Note: api_client methods return LISTS directly (they unwrap .items internally):
+  - get_cards()       → list[dict]
+  - get_top_players() → list[dict]
+  - get_battlelog()   → list[dict]
+  - get_player()      → dict
 """
 
 import logging
@@ -21,7 +27,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Seed locations: top 5 countries
-# Note: global rankings use a separate endpoint not supported by get_top_players
 LOCATIONS = {
     "US":      57000249,
     "FR":      57000076,
@@ -203,21 +208,42 @@ class Extractor:
     # ----- seed -------------------------------------------------------------
 
     def _seed_from_rankings(self) -> list[str]:
-        """Fetch top players from each location and return their tags."""
+        """Fetch top players from each location and return their tags.
+
+        Tries Path of Legends rankings first, falls back to trophy rankings.
+        api_client methods return lists directly (already unwrapped).
+        """
         tags = []
 
         for name, location_id in self.locations.items():
-            logger.info("Fetching top %d from %s", self.top_limit, name)
-            ranking = self.api.get_top_players(
-                location_id=location_id, limit=self.top_limit
-            )
+            players = []
 
-            if not ranking:
+            # Try Path of Legends ranking first
+            if hasattr(self.api, "get_top_pathoflegend"):
+                logger.info(
+                    "Fetching top %d Path of Legends from %s",
+                    self.top_limit, name,
+                )
+                players = self.api.get_top_pathoflegend(
+                    location_id=location_id, limit=self.top_limit
+                )
+
+            # Fallback to trophy ranking if PoL returned nothing
+            if not players:
+                logger.info(
+                    "Fetching top %d trophy ranking from %s",
+                    self.top_limit, name,
+                )
+                players = self.api.get_top_players(
+                    location_id=location_id, limit=self.top_limit
+                )
+
+            if not players:
                 logger.warning("No ranking data for %s", name)
                 continue
 
-            items = ranking.get("items", [])
-            for player in items:
+            # players is already a list of dicts with "tag" key
+            for player in players:
                 tag = player.get("tag")
                 if tag and self.dedup.is_new(tag):
                     tags.append(tag)
@@ -271,10 +297,9 @@ class Extractor:
                 tag, category, king_level, trophies,
             )
 
-            # Fetch battlelog
-            battlelog = self.api.get_battlelog(tag)
-            if battlelog:
-                battles = battlelog if isinstance(battlelog, list) else battlelog.get("items", battlelog)
+            # Fetch battlelog (returns a list directly)
+            battles = self.api.get_battlelog(tag)
+            if battles:
                 self._battlelogs.append({
                     "player_tag": tag,
                     "battles": battles,
@@ -287,7 +312,6 @@ class Extractor:
 
         # Snowball: crawl opponents at next depth
         if depth < self.snowball_depth and opponent_tags:
-            # Deduplicate the opponent list before recursion
             unique_opponents = list(dict.fromkeys(opponent_tags))
             logger.info(
                 "Snowball depth %d → %d new opponents to crawl",
@@ -314,16 +338,15 @@ class Extractor:
     # ----- cards ------------------------------------------------------------
 
     def _extract_cards(self) -> None:
-        """Fetch the full card reference catalogue."""
+        """Fetch the full card reference catalogue.
+
+        get_cards() returns a list directly.
+        """
         logger.info("Fetching card catalogue")
         cards = self.api.get_cards()
 
-        if cards:
-            if isinstance(cards, list):
-                self._cards = cards
-            else:
-                items = cards.get("items", cards)
-                self._cards = items if isinstance(items, list) else [items]
+        if cards and isinstance(cards, list):
+            self._cards = cards
             logger.info("Got %d cards", len(self._cards))
         else:
             logger.warning("Could not fetch cards catalogue")

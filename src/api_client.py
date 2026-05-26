@@ -36,6 +36,16 @@ from typing import Optional
 
 RATE_LIMIT_DELAY = 0.65
 
+
+def _safe_items(data) -> list:
+    """Extract items from API response, handling both list and dict formats."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("items", [])
+    return []
+
+
 class ClashRoyalClient:
     def __init__(self):
         self.token = get_token()
@@ -45,27 +55,27 @@ class ClashRoyalClient:
             "Accept": "application/json",
         })
 
-    def _get(self,endpoint: str, params : Optional[dict] =  None) -> dict:
+    def _get(self, endpoint: str, params: Optional[dict] = None) -> dict:
         """Call get with rate limit handling and error"""
         url = f"https://api.clashroyale.com/v1{endpoint}"
 
-        try :
-            response = self.session.get(url,params=params,timeout=10)
+        try:
+            response = self.session.get(url, params=params, timeout=10)
             time.sleep(RATE_LIMIT_DELAY)
 
-            if response.status_code == 200 :
+            if response.status_code == 200:
                 return response.json()
             elif response.status_code == 404:
                 logger.warning(f"Ressource not found : {endpoint}")
                 return {}
-            elif response.status_code == 429 :
+            elif response.status_code == 429:
                 logger.warning("Rate limit reached - 30 sec pause")
                 time.sleep(30)
-                return self._get(endpoint,params)
+                return self._get(endpoint, params)
             else:
                 logger.error(f"Error {response.status_code} on {endpoint}")
                 response.raise_for_status()
-        
+
         except requests.exceptions.Timeout:
             logger.error(f"Timeout on {endpoint}")
             raise
@@ -73,35 +83,34 @@ class ClashRoyalClient:
             logger.error("Connexion mistake - check whitelisted IP")
             raise
 
-    def get_player(self, player_tag:str) -> dict:
+    def get_player(self, player_tag: str) -> dict:
         """ID of a player"""
         tag = player_tag.replace("#", "%23")
         return self._get(f"/players/{tag}")
-    
-    
-    def get_battlelog(self,player_tag:str) -> dict:
-        """25 last match of a player """
+
+    def get_battlelog(self, player_tag: str) -> list:
+        """25 last match of a player"""
         tag = player_tag.replace("#", "%23")
         data = self._get(f"/players/{tag}/battlelog")
-        return data.get("items",[])
-
+        return _safe_items(data)
 
     def get_cards(self) -> list:
-        "Full card referential"
+        """Full card referential"""
         data = self._get("/cards")
-        return data.get("items",[])
-    
+        return _safe_items(data)
 
-    def get_top_players(self,location_id:str = "global", limit : int =100) -> list:
+    def get_top_players(self, location_id: str = "global", limit: int = 100) -> list:
         """Ranking of the best player"""
-        if location_id == "global" :
-            data = self._get("/locations/global/rankings/players", params= {"limit": limit})
-        else :
-            data = self._get(f"/locations/{location_id}/rankings/players", params ={"limit": limit})
-        return data.get("items", [])
+        if location_id == "global":
+            data = self._get("/locations/global/rankings/players", params={"limit": limit})
+        else:
+            data = self._get(f"/locations/{location_id}/rankings/players", params={"limit": limit})
+        return _safe_items(data)
 
-
-
-
-
-    
+    def get_top_pathoflegend(self, location_id: int, limit: int = 100) -> list:
+        """Ranking Path of Legends (Ranked) par location."""
+        data = self._get(
+            f"/locations/{location_id}/pathoflegend/players",
+            params={"limit": limit},
+        )
+        return _safe_items(data)
