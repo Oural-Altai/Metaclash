@@ -33,6 +33,9 @@ LOCATIONS = {
     "DE":      57000056,
     "UK":      57000248,
     "BR":      57000032,
+    "KR":      57000117,
+    "JP":      57000113,
+    "MX":      57000148
 }
 
 # Arena thresholds (trophy-based, approximations from current seasons)
@@ -46,8 +49,8 @@ LOW_LEVEL_THRESHOLD = 35
 HIGH_LEVEL_THRESHOLD = 45
 
 # Crawl limits
-DEFAULT_TOP_PLAYERS_LIMIT = 50      # per location
-MAX_SNOWBALL_PLAYERS = 2000         # total cap to avoid runaway crawl
+DEFAULT_TOP_PLAYERS_LIMIT = 100    # per location
+MAX_SNOWBALL_PLAYERS = 5000        # total cap to avoid runaway crawl
 SNOWBALL_DEPTH = 1                  # levels of opponent expansion
 
 
