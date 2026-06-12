@@ -60,7 +60,7 @@ class ClashRoyalClient:
         url = f"https://api.clashroyale.com/v1{endpoint}"
 
         try:
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.session.get(url, params=params, timeout=30)
             time.sleep(RATE_LIMIT_DELAY)
 
             if response.status_code == 200:
